@@ -41,7 +41,7 @@ A custom Home Assistant integration for monitoring shark reports from the Dorsal
 
 ## Sensors
 
-The integration provides two sensors:
+The integration provides two sensors and geo-location entities for map display:
 
 ### DorsalWatch Current Reports
 - Shows the total number of current shark reports as the state value
@@ -58,9 +58,36 @@ The integration provides two sensors:
 - Icon: shark fin
 - Attributes include all fields from the latest report
 
+### Shark Sighting Geo-Locations (Map)
+- Individual geo-location entities for each shark sighting with valid coordinates
+- Entity IDs: `geo_location.dorsalwatch_report_[report_id]` (e.g., `geo_location.dorsalwatch_report_47742`)
+- Entity Names: Friendly names like "Bull Shark at Bondi Beach" or "Tiger Shark at Byron Bay"
+- Icons: Shark icons (varies based on encounter type - tagged sharks use shark-fin icon)
+- **Map Integration**: Each sighting automatically appears as a point on the Home Assistant map
+- **Distance Calculation**: Shows distance from your home coordinates to each sighting location
+- **State Value**: Distance from home in km/miles
+- **Attributes**: Complete report details including:
+  - All original report fields (location, shark type, time, encounter type, etc.)
+  - `coordinates`: Original coordinate string from the API
+  - `country`: Your configured country
+  - `configured_state`: Your configured state (if any)
+
 ## Configuration
 
 The integration fetches data every 5 minutes by default. All report data is available as sensor attributes.
+
+## Usage Examples
+
+Once installed, you'll have entities like:
+- `sensor.dorsalwatch_australia_current_reports` - Shows count of current reports with all report data
+- `sensor.dorsalwatch_australia_latest_report` - Shows latest report timestamp with details
+- `geo_location.dorsalwatch_report_47742` - Individual shark sighting locations on the map
+
+You can use these in:
+- **Dashboards** - Display shark report counts, latest incidents, and interactive maps
+- **Map** - View individual shark sighting locations with distance from home and detailed information
+- **Automations** - Trigger actions when new reports are detected or when sightings occur within a certain distance from home
+- **Notifications** - Alert when shark activity increases or when sightings are detected near your location
 
 ## API Information
 
