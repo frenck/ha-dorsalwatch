@@ -64,6 +64,7 @@ The integration provides two sensors and geo-location entities for map display:
 - Entity Names: Friendly names like "Bull Shark at Bondi Beach" or "Tiger Shark at Byron Bay"
 - Icons: Shark icons (varies based on encounter type - tagged sharks use shark-fin icon)
 - **Map Integration**: Each sighting automatically appears as a point on the Home Assistant map
+- **Dynamic Management**: Entities are automatically created for new reports and removed when reports are no longer in the API response
 - **Distance Calculation**: Shows distance from your home coordinates to each sighting location
 - **State Value**: Distance from home in km/miles
 - **Attributes**: Complete report details including:
@@ -75,6 +76,8 @@ The integration provides two sensors and geo-location entities for map display:
 ## Configuration
 
 The integration fetches data every 5 minutes by default. All report data is available as sensor attributes.
+
+**Entity Lifecycle**: Geo-location entities are dynamically managed - they are automatically created when new shark reports appear in the API and removed when reports are no longer present. This ensures your map stays current and doesn't accumulate outdated sightings.
 
 ## Usage Examples
 

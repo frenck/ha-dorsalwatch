@@ -40,6 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Import here to avoid circular imports
+    from .geo_location import async_unload_entry as geo_async_unload_entry
+    
+    # Unload geo_location entities first
+    await geo_async_unload_entry(hass, entry)
+    
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
