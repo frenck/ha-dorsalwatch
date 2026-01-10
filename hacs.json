@@ -1,0 +1,9 @@
+{
+  "name": "DorsalWatch",
+  "content_in_root": false,
+  "filename": "dorsalwatch",
+  "country": ["AU", "US", "RE", "FM"],
+  "render_readme": true,
+  "domains": ["sensor"],
+  "iot_class": "Cloud Polling"
+}
