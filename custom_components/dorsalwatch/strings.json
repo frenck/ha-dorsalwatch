@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DorsalWatch",
+        "description": "Set up DorsalWatch to monitor shark reports.",
+        "data": {
+          "country": "Country",
+          "state": "State/Province (optional)",
+          "public_key": "Public Key",
+          "page_size": "Number of reports to fetch",
+          "time_range": "Time range (days, 0 for all)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to DorsalWatch API",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "Service is already configured"
+    }
+  }
+}
