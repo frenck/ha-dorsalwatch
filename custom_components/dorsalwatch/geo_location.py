@@ -11,13 +11,16 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util.unit_system import METRIC_SYSTEM
 from homeassistant.helpers import entity_registry as er
+from homeassistant.components import recorder
+from homeassistant.helpers.entity_platform import EntityPlatform
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 # Global tracking of entities per config entry
-_ENTITY_TRACKING = {}
+_ENTITY_INSTANCES = {}
+_PLATFORM_INSTANCE = None
 
 
 async def async_setup_entry(
@@ -26,16 +29,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the geo_location platform."""
+    global _PLATFORM_INSTANCE
+    _PLATFORM_INSTANCE = async_get_current_platform()
+    
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     
     # Initialize entity tracking for this config entry
-    _ENTITY_TRACKING[config_entry.entry_id] = set()
+    _ENTITY_INSTANCES[config_entry.entry_id] = {}
 
     async def async_update_entities():
         """Update entities based on current data."""
+        current_entities = _ENTITY_INSTANCES.get(config_entry.entry_id, {})
+        
         if not coordinator.data:
             # Remove all entities if no data
-            await _cleanup_all_entities(hass, config_entry)
+            await _remove_all_entities(hass, config_entry, current_entities)
             return
 
         current_report_ids = set()
@@ -48,7 +56,7 @@ async def async_setup_entry(
                 current_report_ids.add(report_id)
                 
                 # Check if this is a new entity
-                if report_id not in _ENTITY_TRACKING[config_entry.entry_id]:
+                if report_id not in current_entities:
                     try:
                         coordinate_str = report.get("coordinate", "")
                         if coordinate_str and "," in coordinate_str:
@@ -60,7 +68,7 @@ async def async_setup_entry(
                             if -90 <= lat <= 90 and -180 <= lon <= 180:
                                 entity = DorsalWatchSharkSighting(coordinator, config_entry, report)
                                 new_entities.append(entity)
-                                _ENTITY_TRACKING[config_entry.entry_id].add(report_id)
+                                current_entities[report_id] = entity
                                 _LOGGER.debug(f"Creating new entity for report {report_id}")
                     except (ValueError, AttributeError):
                         _LOGGER.debug(f"Invalid coordinates for report {report_id}: {coordinate_str}")
@@ -71,7 +79,7 @@ async def async_setup_entry(
             async_add_entities(new_entities, update_before_add=True)
 
         # Remove entities that are no longer in the data
-        await _cleanup_removed_entities(hass, config_entry, current_report_ids)
+        await _remove_obsolete_entities(hass, config_entry, current_report_ids, current_entities)
 
     # Set up the initial entities
     await async_update_entities()
@@ -86,46 +94,96 @@ async def async_setup_entry(
     coordinator.async_add_listener(coordinator_updated)
 
 
-async def _cleanup_removed_entities(hass: HomeAssistant, config_entry: ConfigEntry, current_report_ids: set):
+async def _remove_obsolete_entities(hass: HomeAssistant, config_entry: ConfigEntry, current_report_ids: set, entity_instances: dict):
     """Remove entities that are no longer in the data."""
     entity_registry = er.async_get(hass)
-    tracked_ids = _ENTITY_TRACKING.get(config_entry.entry_id, set()).copy()
+    entities_to_remove = []
     
-    for report_id in tracked_ids:
+    for report_id, entity in list(entity_instances.items()):
         if report_id not in current_report_ids:
-            # This entity should be removed
-            entity_id = f"geo_location.dorsalwatch_report_{report_id}"
+            entities_to_remove.append((report_id, entity))
+    
+    for report_id, entity in entities_to_remove:
+        entity_id = f"geo_location.dorsalwatch_report_{report_id}"
+        
+        try:
+            # Method 1: Remove via platform
+            if _PLATFORM_INSTANCE and hasattr(_PLATFORM_INSTANCE, 'async_remove_entity'):
+                await _PLATFORM_INSTANCE.async_remove_entity(entity.entity_id)
+                _LOGGER.debug(f"Removed entity via platform: {entity_id}")
+            else:
+                # Method 2: Traditional removal
+                await entity.async_remove(force_remove=True)
+                _LOGGER.debug(f"Removed entity via async_remove: {entity_id}")
             
             # Remove from entity registry
             if entity_registry.async_get(entity_id):
                 entity_registry.async_remove(entity_id)
-                _LOGGER.debug(f"Removed entity {entity_id}")
+                _LOGGER.debug(f"Removed entity {entity_id} from registry")
             
-            # Remove from tracking
-            _ENTITY_TRACKING[config_entry.entry_id].discard(report_id)
+            # Purge from recorder database if available
+            await _purge_entity_from_recorder(hass, entity_id)
+            
+        except Exception as e:
+            _LOGGER.warning(f"Error removing entity {entity_id}: {e}")
+        
+        # Remove from our tracking
+        entity_instances.pop(report_id, None)
 
 
-async def _cleanup_all_entities(hass: HomeAssistant, config_entry: ConfigEntry):
+async def _remove_all_entities(hass: HomeAssistant, config_entry: ConfigEntry, entity_instances: dict):
     """Remove all entities for this config entry."""
     entity_registry = er.async_get(hass)
-    tracked_ids = _ENTITY_TRACKING.get(config_entry.entry_id, set()).copy()
     
-    for report_id in tracked_ids:
+    for report_id, entity in list(entity_instances.items()):
         entity_id = f"geo_location.dorsalwatch_report_{report_id}"
         
-        # Remove from entity registry
-        if entity_registry.async_get(entity_id):
-            entity_registry.async_remove(entity_id)
-            _LOGGER.debug(f"Removed entity {entity_id}")
+        try:
+            # Method 1: Remove via platform
+            if _PLATFORM_INSTANCE and hasattr(_PLATFORM_INSTANCE, 'async_remove_entity'):
+                await _PLATFORM_INSTANCE.async_remove_entity(entity.entity_id)
+                _LOGGER.debug(f"Removed entity via platform: {entity_id}")
+            else:
+                # Method 2: Traditional removal
+                await entity.async_remove(force_remove=True)
+                _LOGGER.debug(f"Removed entity via async_remove: {entity_id}")
+            
+            # Remove from entity registry
+            if entity_registry.async_get(entity_id):
+                entity_registry.async_remove(entity_id)
+                _LOGGER.debug(f"Removed entity {entity_id} from registry")
+            
+            # Purge from recorder database if available
+            await _purge_entity_from_recorder(hass, entity_id)
+            
+        except Exception as e:
+            _LOGGER.warning(f"Error removing entity {entity_id}: {e}")
     
-    # Clear tracking
-    _ENTITY_TRACKING[config_entry.entry_id] = set()
+    # Clear all tracking
+    entity_instances.clear()
+
+
+async def _purge_entity_from_recorder(hass: HomeAssistant, entity_id: str):
+    """Purge entity data from the recorder database."""
+    try:
+        if recorder.get_instance(hass):
+            # Schedule purge of entity data
+            recorder.get_instance(hass).async_add_executor_job(
+                recorder.purge.purge_entity_data,
+                recorder.get_instance(hass),
+                [entity_id]
+            )
+            _LOGGER.debug(f"Scheduled purge of entity data for {entity_id}")
+    except Exception as e:
+        _LOGGER.debug(f"Could not purge recorder data for {entity_id}: {e}")
 
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload geo_location entities."""
-    # Clean up tracking when integration is unloaded
-    _ENTITY_TRACKING.pop(config_entry.entry_id, None)
+    # Clean up all entities and tracking when integration is unloaded
+    current_entities = _ENTITY_INSTANCES.get(config_entry.entry_id, {})
+    await _remove_all_entities(hass, config_entry, current_entities)
+    _ENTITY_INSTANCES.pop(config_entry.entry_id, None)
     return True
 
 
@@ -269,6 +327,13 @@ class DorsalWatchSharkSighting(CoordinatorEntity, GeolocationEvent):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
+        # Check if this entity's report ID is still in the current data
+        if self.coordinator.data:
+            current_report_ids = {report.get("id") for report in self.coordinator.data if report.get("id")}
+            report_id = self._report_data.get("id")
+            if report_id not in current_report_ids:
+                return False
+        
         return (
             self.coordinator.last_update_success and 
             self._latitude is not None and 
