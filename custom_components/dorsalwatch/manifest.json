@@ -3,7 +3,7 @@
   "name": "DorsalWatch",
   "codeowners": ["@your_github_username"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["recorder"],
   "documentation": "https://github.com/your_github_username/ha-dorsalwatch",
   "integration_type": "service",
   "iot_class": "cloud_polling",
