@@ -164,16 +164,18 @@ async def _remove_all_entities(hass: HomeAssistant, config_entry: ConfigEntry, e
 
 
 async def _purge_entity_from_recorder(hass: HomeAssistant, entity_id: str):
-    """Purge entity data from the recorder database."""
+    """Purge entity data from the recorder database using the service call."""
     try:
-        if recorder.get_instance(hass):
-            # Schedule purge of entity data
-            recorder.get_instance(hass).async_add_executor_job(
-                recorder.purge.purge_entity_data,
-                recorder.get_instance(hass),
-                [entity_id]
-            )
-            _LOGGER.debug(f"Scheduled purge of entity data for {entity_id}")
+        # Use the same service call that works manually
+        await hass.services.async_call(
+            "recorder",
+            "purge_entities",
+            {
+                "keep_days": 0,
+                "entity_id": [entity_id]
+            }
+        )
+        _LOGGER.debug(f"Called recorder.purge_entities for {entity_id}")
     except Exception as e:
         _LOGGER.debug(f"Could not purge recorder data for {entity_id}: {e}")
 
